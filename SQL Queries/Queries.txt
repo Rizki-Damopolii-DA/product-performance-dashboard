@@ -1,0 +1,261 @@
+CREATE TABLE product_sales_raw(
+date TEXT,
+customer_type TEXT,
+country TEXT,
+product TEXT,
+discount_band TEXT,
+units_sold INT
+)
+
+---------
+
+CREATE TABLE product_data (
+Product_ID TEXT PRIMARY KEY,
+Product	TEXT,
+Category TEXT,
+Cost_Price TEXT,
+Sale_Price TEXT,
+Brand TEXT,
+Description TEXT,
+Image_url TEXT
+)
+
+---------
+
+CREATE TABLE product_sales AS
+SELECT
+	TO_DATE(date, 'DD/MM/YYYY') AS date,
+	customer_type,
+	country,
+	product,
+	discount_band,
+	units_sold
+FROM product_sales_raw;
+
+---------
+
+DROP TABLE product_sales_raw
+
+---------
+
+CREATE TABLE discount_data (
+Month TEXT,
+Discount_Band TEXT,
+Discount INT
+)
+
+---------
+
+ALTER TABLE product_data
+ALTER COLUMN cost_price
+TYPE NUMERIC(10,2)
+USING REPLACE(cost_price, '$', '')::NUMERIC;
+
+---------
+
+ALTER TABLE product_data
+ALTER COLUMN sale_price
+TYPE NUMERIC(10,2)
+USING REPLACE(sale_price, '$', '')::NUMERIC;
+
+---------
+
+ALTER TABLE product_sales
+ADD CONSTRAINT fk_sales_product
+FOREIGN KEY (product)
+REFERENCES product_data(product_id)
+
+---------
+
+UPDATE product_sales
+SET
+	discount_band = LOWER(TRIM(discount_band))
+
+---------
+
+ALTER TABLE discount_data
+RENAME COLUMN discount TO discount_pct;
+
+---------
+
+SELECT * ,
+(sale_price * units_sold) as revenue,
+(cost_price * units_sold) as total_cost
+FROM product_data a
+JOIN product_sales b
+on a.product_id = b.product
+
+---------
+
+SELECT *,
+(sale_price * units_sold) as revenue,
+(cost_price * units_sold) as total_cost,
+TO_CHAR(date,'FMMonth') as month,
+TO_CHAR(date,'yyyy') as year
+FROM product_data a
+JOIN product_sales b
+on a.product_id = b.product
+
+---------
+
+SELECT 
+a.product,
+a.category,
+a.brand,
+a.description,
+a.sale_price,
+a.cost_price,
+b.units_sold,
+b.date,
+b.country,
+b.customer_type,
+b.discount_band,
+(sale_price * units_sold) as revenue,
+(cost_price * units_sold) as total_cost,
+TO_CHAR(date,'FMMonth') as month,
+TO_CHAR(date,'yyyy') as year
+FROM product_data a
+JOIN product_sales b
+on a.product_id = b.product
+
+---------
+
+with CTE AS (
+	SELECT 
+	a.product,
+	a.category,
+	a.brand,
+	a.description,
+	a.sale_price,
+	a.cost_price,
+	b.units_sold,
+	b.date,
+	b.country,
+	b.customer_type,
+	b.discount_band,
+	b.units_sold
+	,
+	(sale_price * units_sold) as revenue,
+	(cost_price * units_sold) as total_cost,
+	TO_CHAR(date,'FMMonth') as month,
+	TO_CHAR(date,'yyyy') as year
+	FROM product_data a
+	JOIN product_sales b
+	on a.product_id = b.product
+)
+
+SELECT * FROM CTE
+
+---------
+
+with CTE AS (
+	SELECT 
+	a.product,
+	a.category,
+	a.brand,
+	a.description,
+	a.sale_price,
+	a.cost_price,
+	b.units_sold,
+	b.date,
+	b.country,
+	b.customer_type,
+	b.discount_band,
+	b.units_sold
+	,
+	(sale_price * units_sold) as revenue,
+	(cost_price * units_sold) as total_cost,
+	TO_CHAR(date,'FMMonth') as month,
+	TO_CHAR(date,'yyyy') as year
+	FROM product_data a
+	JOIN product_sales b
+	on a.product_id = b.product
+)
+
+SELECT * FROM CTE a
+JOIN discount_data b
+on a.discount_band = b.discount_band AND a.month = b.month
+
+---------
+
+with CTE AS (
+	SELECT 
+	a.product,
+	a.category,
+	a.brand,
+	a.description,
+	a.sale_price,
+	a.cost_price,
+	b.units_sold,
+	b.date,
+	b.country,
+	b.customer_type,
+	b.discount_band,
+	b.units_sold
+	,
+	(sale_price * units_sold) as revenue,
+	(cost_price * units_sold) as total_cost,
+	TO_CHAR(date,'FMMonth') as month,
+	TO_CHAR(date,'yyyy') as year
+	FROM product_data a
+	JOIN product_sales b
+	on a.product_id = b.product
+)
+
+---------
+
+SELECT
+*,
+(1 - discount_pct*1.0/100) * revenue AS revenue_after_discount
+FROM CTE a
+JOIN discount_data b
+on a.discount_band = b.discount_band AND a.month = b.month
+
+CREATE OR REPLACE VIEW vw_sales AS
+	WITH CTE AS (
+		SELECT 
+		a.product,
+		a.category,
+		a.brand,
+		a.description,
+		a.image_url,
+		a.sale_price,
+		a.cost_price,
+		b.units_sold,
+		b.date,
+		b.country,
+		b.customer_type,
+		b.discount_band
+		,
+		(a.sale_price * b.units_sold) as revenue,
+		(a.cost_price * b.units_sold) as total_cost,
+		TO_CHAR(b.date,'FMMonth') as month,
+		TO_CHAR(b.date,'yyyy') as year
+		FROM product_data a
+		JOIN product_sales b
+		on a.product_id = b.product
+	)
+	
+	SELECT
+		a.product,
+		a.category,
+		a.brand,
+		a.description,
+		a.image_url,
+		a.date,
+		a.country,
+		a.customer_type,
+		a.sale_price,
+		a.cost_price,
+		a.units_sold,
+		a.revenue,
+		a.total_cost,
+		a.year,
+		a.month,
+		b.discount_band,
+		b.discount_pct,
+		(1 - discount_pct*1.0/100) * revenue AS revenue_after_discount
+	FROM CTE a
+	JOIN discount_data b
+		ON a.discount_band = b.discount_band 
+		AND a.month = b.month
